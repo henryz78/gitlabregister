@@ -34,6 +34,23 @@ REGISTRATION_STATUS_UNCLEAR = "unclear"
 REGISTRATION_STATUS_ERROR = "error"
 IDENTITY_VERIFICATION_STATUS = "identity_verification_required"
 MAX_REGISTRATION_COUNT = 5
+LOG_VERBOSE = False
+
+
+def set_log_verbose(enabled):
+    global LOG_VERBOSE
+    LOG_VERBOSE = bool(enabled)
+
+
+def user_log(message):
+    print(message)
+
+
+def debug_log(message):
+    if LOG_VERBOSE:
+        print(message)
+
+
 RANDOM_FIRST_NAMES = (
     "Alex",
     "Jordan",
@@ -260,7 +277,7 @@ async def type_value(page, selector, value, label):
     field = page.locator(selector).first
     await field.scroll_into_view_if_needed()
     await field.fill(value)
-    print(f"[*] Filled {label}.")
+    debug_log(f"[*] 已填写: {label}")
 
 
 def build_button_click_script(button_texts, preferred_selectors):
@@ -602,7 +619,7 @@ async def click_button_by_role(page, button_texts):
                 if await button.count() > 0 and await button.is_visible():
                     await button.scroll_into_view_if_needed()
                     await button.click(timeout=5000)
-                    print(f"[*] Clicked button by role: {text}")
+                    debug_log(f"[*] 已点击按钮: {text}")
                     return True
             except Exception:
                 continue
@@ -615,7 +632,7 @@ async def click_register_button(page):
 
     clicked = await page.evaluate(build_register_button_click_script())
     if clicked:
-        print("[*] Clicked button by JavaScript fallback.")
+        debug_log("[*] 已通过脚本点击提交按钮")
     return bool(clicked)
 
 
@@ -625,11 +642,11 @@ async def click_verify_button(page):
 
     clicked = await page.evaluate(build_verify_button_click_script())
     if clicked:
-        print("[*] Clicked verification button by JavaScript fallback.")
+        debug_log("[*] 已通过脚本点击验证码按钮")
     return bool(clicked)
 
 
-async def press_enter_if_signup_form_visible(page, password_selector):
+async def signup_form_still_visible(page, password_selector):
     try:
         password_field = page.locator(password_selector).first
         if await password_field.count() == 0 or not await password_field.is_visible():
@@ -639,12 +656,37 @@ async def press_enter_if_signup_form_visible(page, password_selector):
         if await continue_button.count() == 0 or not await continue_button.is_visible():
             return False
 
-        await password_field.scroll_into_view_if_needed()
-        await password_field.press("Enter")
-        print("[*] Registration form is still visible; pressed Enter to submit.")
         return True
     except Exception:
         return False
+
+
+async def press_enter_if_signup_form_visible(page, password_selector):
+    try:
+        if not await signup_form_still_visible(page, password_selector):
+            return False
+
+        password_field = page.locator(password_selector).first
+        await password_field.scroll_into_view_if_needed()
+        await password_field.press("Enter")
+        debug_log("[*] 页面仍停在注册表单，已按 Enter 兜底提交")
+        return True
+    except Exception:
+        return False
+
+
+async def submit_signup_form(page, password_selector, progress_checks=5, progress_interval_ms=1000):
+    if not await click_register_button(page):
+        return False
+
+    debug_log("[+] 提交按钮已点击")
+    for _ in range(progress_checks):
+        await page.wait_for_timeout(progress_interval_ms)
+        if not await signup_form_still_visible(page, password_selector):
+            return True
+
+    await press_enter_if_signup_form_visible(page, password_selector)
+    return True
 
 
 async def complete_gitlab_onboarding_if_present(page, headless, screenshot_dir):
@@ -652,11 +694,11 @@ async def complete_gitlab_onboarding_if_present(page, headless, screenshot_dir):
     if not isinstance(result, dict) or not result.get("is_onboarding"):
         return False
 
-    print("[*] GitLab onboarding page detected.")
-    print(f"[*] Selected role: {result.get('selected_role') or 'first available option'}")
-    print(f"[*] Selected signup reason: {result.get('selected_reason') or 'first available option'}")
-    print(f"[*] Selected onboarding action: {ONBOARDING_NEW_PROJECT_TEXT}")
-    print(f"[*] Selected GitLab usage: {ONBOARDING_COMPANY_TEXT}")
+    user_log("[*] 处理 GitLab 新手引导...")
+    debug_log(f"[*] Selected role: {result.get('selected_role') or 'first available option'}")
+    debug_log(f"[*] Selected signup reason: {result.get('selected_reason') or 'first available option'}")
+    debug_log(f"[*] Selected onboarding action: {ONBOARDING_NEW_PROJECT_TEXT}")
+    debug_log(f"[*] Selected GitLab usage: {ONBOARDING_COMPANY_TEXT}")
 
     await maybe_screenshot(page, screenshot_dir, "onboarding_form_filled.png")
 
@@ -666,7 +708,7 @@ async def complete_gitlab_onboarding_if_present(page, headless, screenshot_dir):
             build_button_click_script(ONBOARDING_CONTINUE_TEXTS, VERIFY_BUTTON_SELECTORS)
         )
         if clicked:
-            print("[*] Clicked onboarding Continue by JavaScript fallback.")
+            debug_log("[*] 已通过脚本点击继续按钮")
 
     if not clicked:
         print("[!] Onboarding Continue button not found.")
@@ -689,11 +731,11 @@ async def complete_gitlab_default_project_if_present(page, headless, screenshot_
     if not isinstance(result, dict) or not result.get("is_default_project_page"):
         return False
 
-    print("[*] GitLab default project page detected.")
+    user_log("[*] 创建默认项目...")
     group_name = result.get("group_name") or "default"
     project_name = result.get("project_name") or "default"
-    print(f"[*] Keeping default group name: {group_name}")
-    print(f"[*] Keeping default project name: {project_name}")
+    debug_log(f"[*] 使用默认 group: {group_name}")
+    debug_log(f"[*] 使用默认 project: {project_name}")
 
     await maybe_screenshot(page, screenshot_dir, "default_project_form_ready.png")
 
@@ -703,7 +745,7 @@ async def complete_gitlab_default_project_if_present(page, headless, screenshot_
             build_button_click_script(DEFAULT_PROJECT_CREATE_TEXTS, VERIFY_BUTTON_SELECTORS)
         )
         if clicked:
-            print("[*] Clicked default project create by JavaScript fallback.")
+            debug_log("[*] 已通过脚本点击继续按钮")
 
     if not clicked:
         print("[!] Default project create button not found.")
@@ -778,11 +820,11 @@ async def complete_gitlab_company_trial_if_present(page, headless, screenshot_di
         return False
 
     selected_country = result.get("selected_country") or ""
-    print("[*] GitLab company trial page detected.")
-    print(f"[*] Filled company name: {result.get('company_name') or company_name}")
+    user_log("[*] 填写公司试用信息...")
+    debug_log(f"[*] 公司名称: {result.get('company_name') or company_name}")
     if selected_country:
-        print(f"[*] Selected country: {selected_country}")
-    print("[*] Telephone number left blank.")
+        debug_log(f"[*] 已选国家: {selected_country}")
+    debug_log("[*] 电话保持为空")
 
     if not result.get("company_name") or not selected_country:
         print("[!] Company trial form could not be completed.")
@@ -797,7 +839,7 @@ async def complete_gitlab_company_trial_if_present(page, headless, screenshot_di
             build_button_click_script(COMPANY_TRIAL_CONTINUE_TEXTS, VERIFY_BUTTON_SELECTORS)
         )
         if clicked:
-            print("[*] Clicked company trial Continue by JavaScript fallback.")
+            debug_log("[*] 已通过脚本点击试用继续按钮")
 
     if not clicked:
         print("[!] Company trial Continue button not found.")
@@ -871,7 +913,7 @@ def prepare_email(email):
         print("[!] email_register module not found and no email provided.")
         raise RuntimeError("email_register module not found and no email provided.")
 
-    print("[*] No email provided. Creating temporary email using configured email API...")
+    user_log("[*] 准备临时邮箱...")
     generated_email, mail_key = get_email_and_token()
     if not generated_email:
         print("[!] Failed to create temporary email.")
@@ -943,14 +985,16 @@ async def register_gitlab_async(
     headless=True,
     screenshots=False,
     output_dir=None,
+    verbose=False,
 ):
+    set_log_verbose(verbose)
     browser_proxy_selection = select_browser_proxy()
     browser_proxy = browser_proxy_selection.proxy
     email, mail_key = prepare_email(email)
     email_metadata = get_email_token_metadata(mail_key) if mail_key and get_email_token_metadata else {}
     if not name:
         name = generate_random_name()
-        print(f"[*] Generated profile name: {name}")
+        debug_log(f"[*] 已生成姓名: {name}")
 
     if not username:
         username = f"{get_clean_username(email)}_{random.randint(1000, 9999)}"
@@ -967,7 +1011,7 @@ async def register_gitlab_async(
 
     if not password:
         password = generate_random_password(exclude_words=exclude_list)
-        print(f"[*] Generated a secure password: {password}")
+        user_log("[*] 密码已生成，会保存到 accounts.json。")
 
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     account_info_base = {
@@ -985,24 +1029,24 @@ async def register_gitlab_async(
         account_info_base["browser_proxy"] = browser_proxy
         account_info_base["browser_proxy_mode"] = browser_proxy_selection.mode
 
-    print("[*] Starting GitLab registration for:")
-    print(f"    Name: {first_name} {last_name}")
-    print(f"    Username: {username}")
-    print(f"    Email: {email}")
-    print(f"    Password: {password}")
-    print(f"    Mode: {'Headless' if headless else 'Headed'}")
-    print(f"    Output: {os.path.abspath(batch_output_dir)}")
+    user_log("[*] 开始注册 GitLab 账号...")
+    user_log(f"    邮箱: {email}")
+    user_log(f"    用户名: {username}")
+    debug_log(f"    姓名: {first_name} {last_name}")
+    debug_log(f"    密码: {'***'}")
+    debug_log(f"    浏览器: {'Headless' if headless else 'Headed'}")
+    debug_log(f"    输出目录: {os.path.abspath(batch_output_dir)}")
     if screenshot_dir:
-        print(f"    Screenshots: {os.path.abspath(screenshot_dir)}")
+        debug_log(f"    截图目录: {os.path.abspath(screenshot_dir)}")
     else:
-        print("    Screenshots: disabled")
+        debug_log("    截图: 关闭")
 
     launch_args = {"headless": headless}
     if browser_proxy:
         launch_args["proxy"] = {"server": browser_proxy}
-        print(f"[*] Browser proxy: {browser_proxy}")
+        debug_log(f"[*] 浏览器代理: {browser_proxy}")
     elif browser_proxy_selection.count:
-        print("[*] Browser proxy pool selected direct connection.")
+        debug_log("[*] 代理池当前选择直连")
 
     browser = None
     context = None
@@ -1015,12 +1059,12 @@ async def register_gitlab_async(
             browser_proxy_recorded = True
 
     try:
-        print("[*] Launching CloakBrowser...")
+        user_log("[*] 启动浏览器...")
         browser = await launch_browser(**launch_args)
         context = await browser.new_context(viewport={"width": 1280, "height": 1024})
         page = await context.new_page()
 
-        print("[*] Navigating to GitLab sign up page...")
+        debug_log("[*] 打开 GitLab 注册页...")
         await page.goto("https://gitlab.com/users/sign_up")
         await page.wait_for_timeout(3000)
 
@@ -1057,7 +1101,7 @@ async def register_gitlab_async(
         accept_button = page.locator("#onetrust-accept-btn-handler, #btn-accept-all").first
         if await accept_button.count() > 0 and await accept_button.is_visible():
             await accept_button.click()
-            print("[*] Dismissed cookie consent banner.")
+            debug_log("[*] 已关闭 Cookie 弹窗")
             await page.wait_for_timeout(1500)
 
         await maybe_screenshot(page, screenshot_dir, "signup_form_filled.png")
@@ -1067,16 +1111,12 @@ async def register_gitlab_async(
             await maybe_screenshot(page, screenshot_dir, "captcha_challenge.png")
             input(">>> Press Enter here once the CAPTCHA is solved to submit the form...")
 
-        print("[*] Clicking submit button...")
-        if await click_register_button(page):
-            print("[+] Submit button clicked.")
-            await page.wait_for_timeout(2500)
-            await press_enter_if_signup_form_visible(page, password_selector)
-        else:
+        user_log("[*] 提交注册表单...")
+        if not await submit_signup_form(page, password_selector):
             print("[!] Submit button not found.")
 
         await page.wait_for_timeout(6000)
-        print(f"[*] Current URL: {page.url}")
+        debug_log(f"[*] 当前 URL: {page.url}")
         await maybe_screenshot(page, screenshot_dir, "post_submit_status.png")
 
         identity_block = await detect_identity_verification_block(
@@ -1092,14 +1132,14 @@ async def register_gitlab_async(
         if identity_block["blocked"]:
             pass
         elif otp_field:
-            print("[!] OTP verification page reached.")
+            user_log("[*] 已进入邮箱验证码步骤。")
             otp_code = None
             if mail_key:
                 provider_name = email_metadata.get("provider") or "temporary email provider"
-                print(f"[*] Polling {provider_name} for verification code...")
+                user_log(f"[*] 正在从 {provider_name} 获取验证码...")
                 otp_code = get_verification_code(mail_key, email, timeout=120)
                 if otp_code:
-                    print(f"[+] Got OTP code automatically: {otp_code}")
+                    user_log("[+] 验证码已获取。")
                 else:
                     print("[!] Failed to get OTP code automatically.")
 
@@ -1110,11 +1150,11 @@ async def register_gitlab_async(
             await page.wait_for_timeout(1000)
 
             if await click_verify_button(page):
-                print("[+] OTP verification button clicked.")
+                debug_log("[+] 验证码按钮已点击")
             else:
                 await page.keyboard.press("Enter")
 
-            print("[*] OTP submitted. Waiting for redirection...")
+            user_log("[*] 验证码已提交，等待跳转...")
             await page.wait_for_timeout(8000)
         else:
             print("[*] Verification code field not detected.")
@@ -1154,7 +1194,7 @@ async def register_gitlab_async(
                 break
 
         final_url = page.url
-        print(f"[*] Final URL: {final_url}")
+        debug_log(f"[*] 最终 URL: {final_url}")
         await maybe_screenshot(page, screenshot_dir, "registration_final_state.png")
 
         success = (
@@ -1190,10 +1230,10 @@ async def register_gitlab_async(
                 print(f"[!] Could not read GitLab session cookie: {exc}")
 
             if account_info["namespace_id"]:
-                print(f"[*] Namespace ID: {account_info['namespace_id']}")
+                debug_log(f"[*] Namespace ID: {account_info['namespace_id']}")
             if account_info["_gitlab_session"]:
-                print("[*] GitLab session cookie captured.")
-            print("[+] Registration successful!")
+                debug_log("[*] 已获取 GitLab session cookie")
+            user_log("[+] 注册成功。")
             success_record = build_success_account_record(account_info)
             record_browser_proxy_once(True)
             return success_record
@@ -1234,6 +1274,7 @@ async def register_one(*, config, outputs, email=None, password=None, name=None,
         headless=config.headless,
         screenshots=config.screenshots,
         output_dir=getattr(outputs, "output_dir", None),
+        verbose=getattr(config, "log_verbose", False),
     )
     if isinstance(result, dict):
         outputs.add_success_account(result)
@@ -1286,6 +1327,7 @@ async def register_gitlab_batch_async(
     headless=True,
     screenshots=False,
     register_once=None,
+    verbose=False,
 ):
     count = parse_registration_count(count)
     validate_batch_options(count, email=email, username=username)
@@ -1303,6 +1345,7 @@ async def register_gitlab_batch_async(
                 username=username,
                 headless=headless,
                 screenshots=screenshots,
+                verbose=verbose,
             )
         except Exception as exc:
             print(f"[!] Serial registration {index}/{count} error: {exc}")
@@ -1328,6 +1371,7 @@ def register_gitlab(
     headless=True,
     screenshots=False,
     count=1,
+    verbose=False,
 ):
     count = parse_registration_count(count)
     validate_batch_options(count, email=email, username=username)
@@ -1341,6 +1385,7 @@ def register_gitlab(
                 username,
                 headless=headless,
                 screenshots=screenshots,
+                verbose=verbose,
             )
         )
 
@@ -1353,6 +1398,7 @@ def register_gitlab(
             username=username,
             headless=headless,
             screenshots=screenshots,
+            verbose=verbose,
         )
     )
 
@@ -1364,6 +1410,7 @@ if __name__ == "__main__":
     parser.add_argument("--name", default=None, help="Profile name (optional, auto-generated if omitted)")
     parser.add_argument("--username", default=None, help="Username (optional, auto-generated from email if omitted)")
     parser.add_argument("--headed", action="store_true", help="Launch headed browser (default is headless)")
+    parser.add_argument("--verbose", action="store_true", help="Print verbose logs")
     parser.add_argument(
         "--screenshots",
         action="store_true",
@@ -1390,4 +1437,5 @@ if __name__ == "__main__":
         headless=not args.headed,
         screenshots=args.screenshots,
         count=args.count,
+        verbose=args.verbose,
     )

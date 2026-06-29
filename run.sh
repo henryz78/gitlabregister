@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 cd "$(dirname "$0")"
+export CLOAKBROWSER_SUPPRESS_FONT_WARNING=1
 
 if [ ! -d .venv ]; then
     echo "首次运行请先初始化: bash start.sh"

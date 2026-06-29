@@ -37,6 +37,27 @@ class CliTests(unittest.TestCase):
             self.assertEqual(summary['attempted'], 1)
             self.assertEqual(summary['success'], 0)
 
+    def test_main_prints_output_paths_after_run(self):
+        async def fake_register_one(*, config, outputs, email=None, password=None, name=None, username=None):
+            outputs.record_attempt()
+            outputs.add_success_account({'email': 'a@example.test', 'username': 'alice'})
+            return 'success'
+
+        lines = []
+        with tempfile.TemporaryDirectory() as tmp:
+            code = cli.main(
+                ['--count', '1', '--output-dir', tmp],
+                register_one=fake_register_one,
+                output_func=lines.append,
+            )
+
+            self.assertEqual(code, 0)
+            output = '\n'.join(lines)
+            self.assertIn('成功账号文件:', output)
+            self.assertIn('本批次统计:', output)
+            self.assertIn(str(Path(tmp) / 'accounts.json'), output)
+
+
     def test_run_label_uses_output_root_when_output_dir_omitted(self):
         async def fake_register_one(*, config, outputs, email=None, password=None, name=None, username=None):
             outputs.record_attempt()

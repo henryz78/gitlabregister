@@ -114,6 +114,43 @@ class FakePage:
         return self.button
 
 
+class FakeSignupProgressField:
+    def __init__(self, visible_sequence):
+        self.visible_sequence = list(visible_sequence)
+        self.first = self
+        self.scrolled = False
+        self.pressed_keys = []
+
+    async def count(self):
+        return 1
+
+    async def is_visible(self):
+        if self.visible_sequence:
+            return self.visible_sequence.pop(0)
+        return True
+
+    async def scroll_into_view_if_needed(self):
+        self.scrolled = True
+
+    async def press(self, key):
+        self.pressed_keys.append(key)
+
+
+class FakeSubmitPage(FakePage):
+    def __init__(self, password_visible_sequence):
+        super().__init__()
+        self.password_field = FakeSignupProgressField(password_visible_sequence)
+        self.timeouts = []
+
+    def locator(self, selector):
+        if selector == "#password":
+            return self.password_field
+        return super().locator(selector)
+
+    async def wait_for_timeout(self, timeout):
+        self.timeouts.append(timeout)
+
+
 class FakeScreenshotPage:
     def __init__(self):
         self.screenshots = []
@@ -611,6 +648,38 @@ class RegisterGitLabAsyncClickTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(retried)
         self.assertIn("Enter", page.button.pressed_keys)
 
+    async def test_submit_signup_form_skips_enter_when_page_progresses(self):
+        module = self.import_register_gitlab()
+        page = FakeSubmitPage([False])
+
+        submitted = await module.submit_signup_form(
+            page,
+            "#password",
+            progress_checks=2,
+            progress_interval_ms=50,
+        )
+
+        self.assertTrue(submitted)
+        self.assertTrue(page.button.clicked)
+        self.assertEqual(page.password_field.pressed_keys, [])
+        self.assertEqual(page.timeouts, [50])
+
+    async def test_submit_signup_form_uses_enter_fallback_after_waiting(self):
+        module = self.import_register_gitlab()
+        page = FakeSubmitPage([True, True, True, True])
+
+        submitted = await module.submit_signup_form(
+            page,
+            "#password",
+            progress_checks=2,
+            progress_interval_ms=50,
+        )
+
+        self.assertTrue(submitted)
+        self.assertTrue(page.button.clicked)
+        self.assertEqual(page.password_field.pressed_keys, ["Enter"])
+        self.assertEqual(page.timeouts, [50, 50])
+
     async def test_onboarding_page_is_filled_and_continued(self):
         module = self.import_register_gitlab()
         page = FakeOnboardingPage()
@@ -724,6 +793,7 @@ class RegisterGitLabAsyncClickTests(unittest.IsolatedAsyncioTestCase):
         class Config:
             headless = True
             screenshots = False
+            log_verbose = True
 
         class Outputs:
             def __init__(self):
@@ -737,6 +807,7 @@ class RegisterGitLabAsyncClickTests(unittest.IsolatedAsyncioTestCase):
                 self.accounts.append(account)
 
         async def fake_register_gitlab_async(**kwargs):
+            self.assertTrue(kwargs["verbose"])
             return {"email": "user@example.test", "username": kwargs["username"]}
 
         outputs = Outputs()

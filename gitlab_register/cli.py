@@ -49,6 +49,7 @@ async def run_async(
     *,
     register_one: RegisterOne = default_register_one,
     env_path: str | Path = ".env",
+    output_func: Callable[[str], None] = print,
 ) -> int:
     config = load_config(env_path=env_path)
     config = apply_cli_overrides(
@@ -88,6 +89,8 @@ async def run_async(
     finally:
         outputs.write_accounts()
         outputs.write_summary(requested=config.count)
+    output_func(f"成功账号文件: {outputs.accounts_path}")
+    output_func(f"本批次统计: {outputs.summary_path}")
     return 0
 
 
@@ -96,10 +99,18 @@ def main(
     *,
     register_one: RegisterOne = default_register_one,
     env_path: str | Path = ".env",
+    output_func: Callable[[str], None] = print,
 ) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return asyncio.run(run_async(args, register_one=register_one, env_path=env_path))
+    return asyncio.run(
+        run_async(
+            args,
+            register_one=register_one,
+            env_path=env_path,
+            output_func=output_func,
+        )
+    )
 
 
 if __name__ == "__main__":
