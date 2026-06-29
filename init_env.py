@@ -30,6 +30,15 @@ CONFIG_FIELDS: tuple[EnvField, ...] = (
 )
 
 
+def should_ask_field(field: EnvField, values: dict[str, str]) -> bool:
+    provider = (values.get("EMAIL_PROVIDER") or "").strip().lower()
+    if field.key.startswith("IDATARIVER_"):
+        return provider == "idatariver"
+    if field.key.startswith("NIMAIL_"):
+        return provider == "nimail"
+    return True
+
+
 def default_values() -> dict[str, str]:
     return {field.key: field.default for field in CONFIG_FIELDS}
 
@@ -55,6 +64,8 @@ def collect_custom_values(
     values = default_values()
     current_group = ""
     for field in CONFIG_FIELDS:
+        if not should_ask_field(field, values):
+            continue
         if field.group != current_group:
             current_group = field.group
             output_func("")

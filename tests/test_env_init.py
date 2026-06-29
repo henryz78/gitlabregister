@@ -34,6 +34,45 @@ class EnvInitTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(parse_env(path.read_text(encoding='utf-8'))['COUNT'], '1')
 
+    def test_custom_nimail_skips_idatariver_prompts(self):
+        answers = iter(['nimail', '', '2', '', '', '', '', '', ''])
+        prompts = []
+
+        def fake_input(prompt):
+            prompts.append(prompt)
+            return next(answers)
+
+        values = init_env.collect_custom_values(
+            input_func=fake_input,
+            output_func=lambda _='': None,
+        )
+
+        joined_prompts = '\n'.join(prompts)
+        self.assertEqual(values['EMAIL_PROVIDER'], 'nimail')
+        self.assertIn('NIMAIL_API_BASE', joined_prompts)
+        self.assertNotIn('IDATARIVER_API_KEY', joined_prompts)
+        self.assertNotIn('IDATARIVER_API_BASE', joined_prompts)
+        self.assertNotIn('IDATARIVER_POLL_INTERVAL_SECONDS', joined_prompts)
+
+    def test_custom_idatariver_skips_nimail_prompt(self):
+        answers = iter(['idatariver', 'idr_key', '', '', '1', '', '', '', '', '', ''])
+        prompts = []
+
+        def fake_input(prompt):
+            prompts.append(prompt)
+            return next(answers)
+
+        values = init_env.collect_custom_values(
+            input_func=fake_input,
+            output_func=lambda _='': None,
+        )
+
+        joined_prompts = '\n'.join(prompts)
+        self.assertEqual(values['EMAIL_PROVIDER'], 'idatariver')
+        self.assertEqual(values['IDATARIVER_API_KEY'], 'idr_key')
+        self.assertIn('IDATARIVER_API_KEY', joined_prompts)
+        self.assertNotIn('NIMAIL_API_BASE', joined_prompts)
+
 
 if __name__ == '__main__':
     unittest.main()
