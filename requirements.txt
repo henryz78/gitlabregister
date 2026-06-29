@@ -1,0 +1,6 @@
+﻿cloakbrowser>=0.3.0
+requests>=2.31.0
+PySocks>=1.7.1
+python-dotenv>=1.0.0
+pytest>=8.0.0
+pytest-asyncio>=0.24.0

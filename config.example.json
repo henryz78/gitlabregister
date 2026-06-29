@@ -1,0 +1,12 @@
+{
+    "email_provider": "idatariver",
+    "idatariver_api_key": "",
+    "idatariver_api_base": "https://apiok.us/api/cbea",
+    "idatariver_poll_interval_seconds": 5,
+    "proxy": "",
+    "browser_proxy_mode": "single",
+    "browser_proxy": "",
+    "browser_proxy_list_text": "",
+    "browser_proxy_url": "",
+    "browser_proxy_refresh_interval_seconds": 120
+}
