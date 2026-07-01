@@ -91,6 +91,65 @@ class EmailRegisterTests(unittest.TestCase):
         session.post.assert_called_once()
         self.assertEqual(session.post.call_args.kwargs["data"]["mail"], "voiceuser@nimail.cn")
 
+    def test_create_temp_email_does_not_print_mailbox_by_default(self):
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = {
+            "success": "true",
+            "user": "voiceuser@nimail.cn",
+        }
+        session = Mock()
+        session.post.return_value = response
+
+        with patch.object(
+            email_module,
+            "_generate_nimail_address",
+            return_value="voiceuser@nimail.cn",
+        ), patch("builtins.print") as printed:
+            self.assertEqual(create_temp_email(session=session), "voiceuser@nimail.cn")
+
+        printed.assert_not_called()
+
+    def test_create_idatariver_email_does_not_print_mailbox_by_default(self):
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = {
+            "code": 0,
+            "result": {
+                "email": "voiceuser@uselesss.org",
+                "id": "mailbox-id-123",
+            },
+        }
+        session = Mock()
+        session.get.return_value = response
+
+        with patch.object(
+            email_module,
+            "IDATARIVER_API_KEY",
+            "idr_test_key",
+        ), patch("builtins.print") as printed:
+            email, email_id = email_module.create_idatariver_email(session=session)
+
+        self.assertEqual(email, "voiceuser@uselesss.org")
+        self.assertEqual(email_id, "mailbox-id-123")
+        printed.assert_not_called()
+
+    def test_wait_for_verification_code_does_not_print_code_by_default(self):
+        session = Mock()
+        with patch.object(
+            email_module,
+            "fetch_nimail_messages",
+            return_value=([{"id": "abc", "subject": "GitLab code 654321"}], 123),
+        ), patch("builtins.print") as printed:
+            code = email_module.wait_for_verification_code(
+                "voiceuser@nimail.cn",
+                timeout=10,
+                session=session,
+            )
+
+        self.assertEqual(code, "654321")
+        printed.assert_not_called()
+
     def test_fetch_nimail_messages_returns_mail_list(self):
         response = Mock()
         response.status_code = 200

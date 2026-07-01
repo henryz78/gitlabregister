@@ -34,6 +34,33 @@ class RegisterGitLabLoggingTests(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertNotIn(replacement_marker, text)
 
+    def test_flow_verbose_enables_email_provider_details(self):
+        import sys
+        import types
+
+        if "requests" not in sys.modules:
+            requests_stub = types.ModuleType("requests")
+
+            class DummySession:
+                def __init__(self):
+                    self.headers = {}
+                    self.proxies = {}
+
+            requests_stub.Session = DummySession
+            sys.modules["requests"] = requests_stub
+
+        import email_register as email_module
+        from gitlab_register import flow
+
+        old_flow_verbose = flow.LOG_VERBOSE
+        old_email_verbose = email_module.LOG_VERBOSE
+        try:
+            flow.set_log_verbose(True)
+            self.assertTrue(email_module.LOG_VERBOSE)
+        finally:
+            flow.set_log_verbose(old_flow_verbose)
+            email_module.set_log_verbose(old_email_verbose)
+
     def test_run_script_suppresses_cloakbrowser_font_warning(self):
         text = Path("run.sh").read_text(encoding="utf-8")
 

@@ -40,6 +40,12 @@ LOG_VERBOSE = False
 def set_log_verbose(enabled):
     global LOG_VERBOSE
     LOG_VERBOSE = bool(enabled)
+    try:
+        from gitlab_register import email_providers
+
+        email_providers.set_log_verbose(enabled)
+    except Exception:
+        pass
 
 
 def user_log(message):

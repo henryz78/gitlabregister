@@ -19,6 +19,17 @@ IDATARIVER_PROVIDER = "idatariver"
 NIMAIL_PROVIDER = "nimail"
 DEFAULT_EMAIL_PROVIDER = IDATARIVER_PROVIDER
 EMAIL_TOKEN_PREFIX = "__email_provider__:"
+LOG_VERBOSE = False
+
+
+def set_log_verbose(enabled: bool) -> None:
+    global LOG_VERBOSE
+    LOG_VERBOSE = bool(enabled)
+
+
+def verbose_log(message: str) -> None:
+    if LOG_VERBOSE:
+        print(message)
 
 _config_path = Path(__file__).resolve().parent.parent / "config.json"
 _conf: Dict[str, Any] = {}
@@ -101,7 +112,7 @@ def create_temp_email(session: Optional[requests.Session] = None) -> str:
     data = response.json()
     if _is_success(data.get("success")):
         applied_email = str(data.get("user") or email)
-        print(f"[*] NiMail temporary email ready: {applied_email}")
+        verbose_log(f"[*] NiMail temporary email ready: {applied_email}")
         return applied_email
 
     message = data.get("message") or "unknown error"
@@ -180,7 +191,7 @@ def create_idatariver_email(session: Optional[requests.Session] = None) -> Tuple
     if not email or not email_id:
         raise Exception("iDataRiver mailbox request failed: missing email or email id")
 
-    print(f"[*] iDataRiver temporary email ready: {email}")
+    verbose_log(f"[*] iDataRiver temporary email ready: {email}")
     return email, email_id
 
 
@@ -344,7 +355,7 @@ def wait_for_idatariver_verification_code(
 
             code = extract_code_from_message(message)
             if code:
-                print(f"[*] iDataRiver verification code received: {code}")
+                verbose_log(f"[*] iDataRiver verification code received: {code}")
                 return code
 
             message_id = _value_from_keys(message, ("id", "message_id", "mail_id", "mailId"))
@@ -353,7 +364,7 @@ def wait_for_idatariver_verification_code(
                 body = fetch_idatariver_message_body(message_id, session=client)
                 code = extract_verification_code(body)
                 if code:
-                    print(f"[*] iDataRiver verification code received: {code}")
+                    verbose_log(f"[*] iDataRiver verification code received: {code}")
                     return code
 
         time.sleep(IDATARIVER_POLL_INTERVAL_SECONDS)
@@ -379,7 +390,7 @@ def wait_for_verification_code(
 
             code = extract_code_from_message(message)
             if code:
-                print(f"[*] NiMail verification code received: {code}")
+                verbose_log(f"[*] NiMail verification code received: {code}")
                 return code
 
             message_id = message.get("id")
@@ -388,7 +399,7 @@ def wait_for_verification_code(
                 body = fetch_nimail_message_body(email, str(message_id), session=client)
                 code = extract_verification_code(body)
                 if code:
-                    print(f"[*] NiMail verification code received: {code}")
+                    verbose_log(f"[*] NiMail verification code received: {code}")
                     return code
 
         time.sleep(5)
@@ -430,3 +441,4 @@ def configure_from_runtime(config) -> None:
     IDATARIVER_API_BASE = str(config.idatariver_api_base or IDATARIVER_API_BASE).rstrip("/")
     IDATARIVER_POLL_INTERVAL_SECONDS = float(config.idatariver_poll_interval_seconds)
     NIMAIL_API_BASE = str(config.nimail_api_base or NIMAIL_API_BASE).rstrip("/")
+    set_log_verbose(getattr(config, "log_verbose", False))
